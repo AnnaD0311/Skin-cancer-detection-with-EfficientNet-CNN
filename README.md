@@ -26,3 +26,4 @@ To ensure biological relevance without introducing boundary distortion artifacts
 ### 3. File Structure & Workflow
 * `balance_dataset.py`: Complete executable script that reads `HAM10000_metadata.csv`, processes images across `HAM10000_images_part_1` & `part_2`, and outputs clean, balanced class folders into `balancing/dataset_balanced/`.
 * `data_analysis.ipynb` / `HAM10000_unified_analysis.ipynb`: Visual validation notebooks for post-balancing class distribution and sample inspection (Original vs. Augmented).
+* `multiclass_analysis.ipynb`: Evaluation and diagnostic notebook for the 7-class multi-class model. It loads training history, generates learning curves, computes detailed classification reports, plots normalized confusion matrices, and evaluates model confidence and high-confidence misclassifications.
