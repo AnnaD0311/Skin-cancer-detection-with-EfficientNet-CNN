@@ -7,6 +7,9 @@ from PIL import Image
 from torchvision import transforms
 import torchvision.transforms.functional as TF
 from tqdm import tqdm
+import argparse
+from preprocessing import preprocess_pipeline
+
 
 # Configuración de Rutas
 BASE_DIR = "."
@@ -75,13 +78,22 @@ def find_image_path(image_id):
             return img_path
     return None
 
-def balance_dataset():
+def load_and_preprocess(src_path, method="contrast_focused"):
+    raw_pil = Image.open(src_path).convert("RGB")
+    cleaned_pil = remove_black_borders(raw_pil)
+    img_np = np.array(cleaned_pil)
+    
+    # Aplica o teu preprocessing.py
+    processed_np = preprocess_pipeline(img_np, target_size=(224, 224), method=method)
+    return Image.fromarray(processed_np)
+
+def balance_dataset(method="contrast_focused"):
     df = pd.read_csv(CSV_PATH)
     classes = df['dx'].unique()
 
     os.makedirs(BALANCED_DIR, exist_ok=True)
 
-    print("Iniciando balanceo de clases...")
+    print(f"Iniciando balanceo de clases con pre-procesamiento '{method}'...")
 
     for cls in classes:
         cls_dir = os.path.join(BALANCED_DIR, cls)
@@ -97,10 +109,8 @@ def balance_dataset():
             for img_id in tqdm(selected_ids, desc=f"Recortando {cls}"):
                 src_path = find_image_path(img_id)
                 if src_path:
-                    # Redimensionar también las originales al tamaño estándar 224x224
-                    img = Image.open(src_path).convert("RGB")
-                    img_resized = img.resize((224, 224), Image.BILINEAR)
-                    img_resized.save(os.path.join(cls_dir, f"{img_id}.jpg"))
+                    img_prep = load_and_preprocess(src_path, method=method)
+                    img_prep.save(os.path.join(cls_dir, f"{img_id}.jpg"))
 
         else:
             # Oversampling + Data Augmentation
@@ -110,9 +120,8 @@ def balance_dataset():
             for img_id in image_ids:
                 src_path = find_image_path(img_id)
                 if src_path:
-                    img = Image.open(src_path).convert("RGB")
-                    img_resized = img.resize((224, 224), Image.BILINEAR)
-                    img_resized.save(os.path.join(cls_dir, f"{img_id}.jpg"))
+                    img_prep = load_and_preprocess(src_path, method=method)
+                    img_prep.save(os.path.join(cls_dir, f"{img_id}.jpg"))
 
             # Generar imágenes aumentadas
             aug_needed = TARGET_COUNT - num_images
@@ -126,10 +135,10 @@ def balance_dataset():
 
                     src_path = find_image_path(img_id)
                     if src_path:
-                        img = Image.open(src_path).convert("RGB")
+                        img_prep = load_and_preprocess(src_path, method=method)
                         
                         # Generar aumentada 100% limpia sin bordes negros
-                        aug_img = apply_augmentation(img)
+                        aug_img = apply_augmentation(img_prep)
 
                         out_path = os.path.join(cls_dir, f"{img_id}_aug_{i}.jpg")
                         aug_img.save(out_path)
@@ -140,4 +149,14 @@ def balance_dataset():
     print(f"\n¡Dataset balanceado guardado en: {BALANCED_DIR}!")
 
 if __name__ == "__main__":
-    balance_dataset()
+    parser = argparse.ArgumentParser(description="Balanceamento do dataset HAM10000 com pre-processamento.")
+    parser.add_argument(
+        "--method",
+        type=str,
+        default="contrast_focused",
+        choices=["baseline", "hair_removal", "color_constancy", "contrast_focused"],
+        help="Pipeline de pre-processamento a aplicar."
+    )
+    args = parser.parse_args()
+
+    balance_dataset(method=args.method)

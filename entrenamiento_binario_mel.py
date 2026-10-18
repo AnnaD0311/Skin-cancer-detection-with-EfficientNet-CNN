@@ -17,7 +17,7 @@ Qué hace
    matriz de confusión, barrido de umbrales.
 5. Escribe una carpeta de ejecución con TODO lo ocurrido:
       resumen_entrenamiento.txt   <- resumen completo (config, entorno, datos, épocas,
-                                      eventos, métricas, advertencias, archivos)
+                                     eventos, métricas, advertencias, archivos)
       consola.log                 <- copia de lo impreso en consola
       historial_epocas.csv        <- métricas por época
       predicciones_validacion.csv <- P(mel) por imagen de validación
@@ -73,6 +73,7 @@ from tensorflow.keras.layers import (Input, Dense, Dropout, BatchNormalization, 
 from tensorflow.keras.applications import EfficientNetB0, EfficientNetB4
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
+from preprocessing import preprocess_pipeline
 
 
 # ======================================================================================
@@ -168,10 +169,17 @@ def count_images(folder, categories):
     return {c: len(os.listdir(os.path.join(folder, c))) for c in categories}
 
 
-def load_image(path, img_size=128, to_rgb=False, pad=False):
+def load_image(path, img_size=128, to_rgb=False, pad=False, preprocessing_method="baseline"):
     img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)  # BGR, uint8
     if img is None:
         return None
+    
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    
+    if preprocessing_method != "baseline":
+        img_rgb = preprocess_pipeline(img_rgb, target_size=(img_size, img_size), method=preprocessing_method)
+        return img_rgb if to_rgb else cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+
     if pad:  # cuadrar con margen negro sin deformar la lesión
         h, w = img.shape[:2]
         s = max(h, w)
@@ -184,7 +192,7 @@ def load_image(path, img_size=128, to_rgb=False, pad=False):
     return img
 
 
-def load_split(folder, categories, img_size, to_rgb, pad, limit=None):
+def load_split(folder, categories, img_size, to_rgb, pad, limit=None, preprocessing_method="baseline"):
     X, Y, files, failed = [], [], [], 0
     for idx, c in enumerate(categories):
         cdir = os.path.join(folder, c)
@@ -192,7 +200,7 @@ def load_split(folder, categories, img_size, to_rgb, pad, limit=None):
         if limit:
             names = names[:limit]
         for f in tqdm(names, desc=f"{os.path.basename(folder)}/{c}", leave=False):
-            img = load_image(os.path.join(cdir, f), img_size, to_rgb, pad)
+            img = load_image(os.path.join(cdir, f), img_size, to_rgb, pad, preprocessing_method=preprocessing_method)
             if img is None:
                 failed += 1
                 continue
@@ -462,6 +470,7 @@ def build_report(ctx):
         kv("Forma X_train / dtype", f"{d['shape_train']} / {d['dtype']}")
         kv("Memoria de los arrays", f"{d['mem_mb']:.0f} MB")
         kv("Tiempo de carga", fmt_dur(d["load_seconds"]))
+        kv("Pre-procesamiento", a.get("preprocessing"))
         kv("Pesos de clase (modo)", a.get("class_weights"))
         kv("Pesos de clase (valores)", ctx.get("class_weights"))
     else:
@@ -502,7 +511,7 @@ def build_report(ctx):
     section("7. EVALUACIÓN EN VALIDACIÓN (modelo final)")
     if ev:
         kv("Umbral", f"{ev['thr']:.2f}  (modo: {ev['thr_mode']}"
-           + (f", sensibilidad mínima {a.get('min_sensitivity')}" if ev['thr_mode'] == 'sensitivity' else "") + ")")
+            + (f", sensibilidad mínima {a.get('min_sensitivity')}" if ev['thr_mode'] == 'sensitivity' else "") + ")")
         kv("val_loss / val_accuracy / val_auc (keras)", ", ".join(f"{k}={v:.4f}" for k, v in ev["keras_eval"].items()))
         L.append("")
         m = ev["at_thr"]
@@ -536,7 +545,7 @@ def build_report(ctx):
     for w in ctx.get("warnings", []):
         L.append(f"- {w}")
     L.append("- El umbral y el early stopping se deciden con la MISMA validación en la que se evalúa: "
-             "los números son algo optimistas.")
+              "los números son algo optimistas.")
     if ctx.get("error"):
         L.extend(["", "ERROR / INTERRUPCIÓN:", ctx["error"]])
 
@@ -596,9 +605,11 @@ def run_training(args, run_dir, ctx, event):
 
     t_load = time.time()
     event(f"Cargando imágenes ({args.img_size}x{args.img_size}, rgb={args.rgb}, pad={args.pad}, "
-          f"limit_per_class={args.limit_per_class}) ...")
-    X_tr, Y_tr, _, failed_tr = load_split(train_folder, categories, args.img_size, args.rgb, args.pad, args.limit_per_class)
-    X_va, Y_va, files_va, failed_va = load_split(val_folder, categories, args.img_size, args.rgb, args.pad, args.limit_per_class)
+          f"preprocessing={args.preprocessing}, limit_per_class={args.limit_per_class}) ...")
+    X_tr, Y_tr, _, failed_tr = load_split(train_folder, categories, args.img_size, args.rgb, args.pad, 
+                                          args.limit_per_class, preprocessing_method=args.preprocessing)
+    X_va, Y_va, files_va, failed_va = load_split(val_folder, categories, args.img_size, args.rgb, args.pad, 
+                                                  args.limit_per_class, preprocessing_method=args.preprocessing)
     Y1_tr, Y1_va = (Y_tr == mel_idx).astype(np.int64), (Y_va == mel_idx).astype(np.int64)  # 1 = melanoma
     ctx["dataset"] = dict(train_folder=train_folder, val_folder=val_folder, categories=categories,
                           counts_train=counts_train, counts_val=counts_val,
@@ -685,7 +696,8 @@ def run_training(args, run_dir, ctx, event):
     model_path = run_dir / f"{args.name}_stage1.keras"
     model.save(model_path)
     files.append(f"{model_path.name} — modelo final entrenado")
-    meta = dict(thr=thr, img_size=args.img_size, to_rgb=args.rgb, pad=args.pad, variant=args.variant)
+    meta = dict(thr=thr, img_size=args.img_size, to_rgb=args.rgb, pad=args.pad, 
+                variant=args.variant, preprocessing=args.preprocessing)
     (run_dir / f"{args.name}_stage1.json").write_text(json.dumps(meta, indent=2))
     files.append(f"{args.name}_stage1.json — metadatos (umbral y pre-procesado)")
 
@@ -707,6 +719,8 @@ def parse_args():
     g.add_argument("--img-size", type=int, default=128)
     g.add_argument("--rgb", action=argparse.BooleanOptionalAction, default=True, help="Convertir BGR -> RGB")
     g.add_argument("--pad", action=argparse.BooleanOptionalAction, default=False, help="Cuadrar con margen negro antes de redimensionar")
+    g.add_argument("--preprocessing", choices=["baseline", "hair_removal", "color_constancy", "contrast_focused"],
+                   default="baseline", help="Técnica de pre-procesamiento a aplicar de preprocessing.py")
     g = p.add_argument_group("modelo / entrenamiento")
     g.add_argument("--variant", choices=["B0", "B4"], default="B4")
     g.add_argument("--pretrained", choices=["imagenet", "none"], default="imagenet")
