@@ -28,4 +28,6 @@ To ensure biological relevance without introducing boundary distortion artifacts
 * `data_analysis.ipynb` / `HAM10000_unified_analysis.ipynb`: Visual validation notebooks for post-balancing class distribution and sample inspection (Original vs. Augmented).
 * `multiclass_analysis.ipynb`: Evaluation and diagnostic notebook for the 7-class multi-class model. It loads training history, generates learning curves, computes detailed classification reports, plots normalized confusion matrices, and evaluates model confidence and high-confidence misclassifications.
 
-OLAAAAAAAA
+## Notes:
+* `balance_dataset_new.py`: Fixes the data leakage error in the balancing.
+* `preprocessing.py`: Has the 4 preprocesses proposed

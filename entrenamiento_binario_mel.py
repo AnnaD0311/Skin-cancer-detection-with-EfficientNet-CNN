@@ -1,45 +1,45 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Entrenamiento BINARIO: melanoma (mel) vs no-melanoma  —  HAM10000
+BINARY Training: melanoma (mel) vs non-melanoma  —  HAM10000
 =================================================================
-Traducción a script de la "Etapa 1" de la sección 13 del notebook
+Translated script of "Stage 1" from section 13 of the notebook
 `Classification_leasion_hierarquico.ipynb`.
 
-Qué hace
+What it does
+------------
+1. (Optional) Organizes HAM10000 into Datasets/training|validation/<class>/
+   with an 80/20 split BY LESION (prevents data leakage).
+2. Loads images in uint8 and converts labels to binary (1 = mel).
+3. Builds an EfficientNet (B0/B4) with a sigmoid head and trains it in two phases:
+   head (frozen backbone) -> fine-tuning (last N layers, low lr).
+4. Evaluates on validation: AUC, AP, sensitivity, specificity, precision, F1,
+   confusion matrix, threshold sweep.
+5. Creates a run folder with EVERYTHING that occurred:
+      training_summary.txt       <- complete summary (config, environment, data, epochs,
+                                     events, metrics, warnings, files)
+      console.log                <- copy of the console output
+      epoch_history.csv          <- metrics per epoch
+      validation_predictions.csv <- P(mel) per validation image
+      metrics.json               <- final and phase metrics
+      training_curves.png / evaluation_stage1.png
+      <name>_stage1.keras        <- trained model (+ <name>_stage1.json with metadata)
+
+Examples
 --------
-1. (Opcional) Organiza el HAM10000 en Datasets/training|validation/<clase>/
-   con split 80/20 POR LESIÓN (evita data leakage).
-2. Carga las imágenes en uint8 y convierte las etiquetas a binario (1 = mel).
-3. Construye un EfficientNet (B0/B4) con cabeza sigmoide y lo entrena en dos fases:
-   cabeza (backbone congelado) -> fine-tuning (últimas N capas, lr bajo).
-4. Evalúa en validación: AUC, AP, sensibilidad, especificidad, precisión, F1,
-   matriz de confusión, barrido de umbrales.
-5. Escribe una carpeta de ejecución con TODO lo ocurrido:
-      resumen_entrenamiento.txt   <- resumen completo (config, entorno, datos, épocas,
-                                     eventos, métricas, advertencias, archivos)
-      consola.log                 <- copia de lo impreso en consola
-      historial_epocas.csv        <- métricas por época
-      predicciones_validacion.csv <- P(mel) por imagen de validación
-      metricas.json               <- métricas finales y de las fases
-      curvas_entrenamiento.png / evaluacion_etapa1.png
-      <nombre>_stage1.keras       <- modelo entrenado (+ <nombre>_stage1.json con metadatos)
+  # dataset already organized
+  python binary_training_mel.py --dataset-dir Datasets
 
-Ejemplos
---------
-  # dataset ya organizado
-  python entrenamiento_binario_mel.py --dataset-dir Datasets
+  # first organize HAM10000 (CSV + images in --base-dir) and train
+  python binary_training_mel.py --base-dir /path/to/HAM10000
 
-  # organizar primero el HAM10000 (CSV + imágenes en --base-dir) y entrenar
-  python entrenamiento_binario_mel.py --base-dir /ruta/HAM10000
+  # quick pipeline test (30 img/class, B0, 1 epoch, no fine-tuning)
+  python binary_training_mel.py --dataset-dir Datasets --quick
 
-  # prueba rápida del pipeline (30 img/clase, B0, 1 época, sin fine-tuning)
-  python entrenamiento_binario_mel.py --dataset-dir Datasets --quick
+  # prioritize not missing melanomas (higher threshold with sensitivity >= 85%)
+  python binary_training_mel.py --dataset-dir Datasets --thr-mode sensitivity --min-sensitivity 0.85
 
-  # priorizar no fallar melanomas (umbral más alto con sensibilidad >= 85 %)
-  python entrenamiento_binario_mel.py --dataset-dir Datasets --thr-mode sensitivity --min-sensitivity 0.85
-
-Uso exclusivamente educativo — no sirve para diagnóstico clínico.
+For educational use only — not intended for clinical diagnosis.
 """
 
 import argparse
@@ -73,6 +73,7 @@ from tensorflow.keras.layers import (Input, Dense, Dropout, BatchNormalization, 
 from tensorflow.keras.applications import EfficientNetB0, EfficientNetB4
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
+from preprocessing import preprocess_pipeline
 from preprocessing import preprocess_pipeline
 
 
@@ -169,7 +170,7 @@ def count_images(folder, categories):
     return {c: len(os.listdir(os.path.join(folder, c))) for c in categories}
 
 
-def load_image(path, img_size=128, to_rgb=False, pad=False, preprocessing_method="baseline"):
+def load_image(path, img_size=224, to_rgb=False, pad=False, preprocessing_method="baseline"):
     img = cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_COLOR)  # BGR, uint8
     if img is None:
         return None
@@ -471,6 +472,7 @@ def build_report(ctx):
         kv("Memoria de los arrays", f"{d['mem_mb']:.0f} MB")
         kv("Tiempo de carga", fmt_dur(d["load_seconds"]))
         kv("Pre-procesamiento", a.get("preprocessing"))
+        kv("Pre-procesamiento", a.get("preprocessing"))
         kv("Pesos de clase (modo)", a.get("class_weights"))
         kv("Pesos de clase (valores)", ctx.get("class_weights"))
     else:
@@ -698,6 +700,8 @@ def run_training(args, run_dir, ctx, event):
     files.append(f"{model_path.name} — modelo final entrenado")
     meta = dict(thr=thr, img_size=args.img_size, to_rgb=args.rgb, pad=args.pad, 
                 variant=args.variant, preprocessing=args.preprocessing)
+    meta = dict(thr=thr, img_size=args.img_size, to_rgb=args.rgb, pad=args.pad, 
+                variant=args.variant, preprocessing=args.preprocessing)
     (run_dir / f"{args.name}_stage1.json").write_text(json.dumps(meta, indent=2))
     files.append(f"{args.name}_stage1.json — metadatos (umbral y pre-procesado)")
 
@@ -716,7 +720,7 @@ def parse_args():
     g.add_argument("--dataset-dir", default=None, help="Carpeta con training/ y validation/ (por defecto <base-dir>/Datasets o ./Datasets)")
     g.add_argument("--limit-per-class", type=int, default=None, help="Máx. imágenes por clase (pruebas rápidas)")
     g = p.add_argument_group("pre-procesado")
-    g.add_argument("--img-size", type=int, default=128)
+    g.add_argument("--img-size", type=int, default=224)
     g.add_argument("--rgb", action=argparse.BooleanOptionalAction, default=True, help="Convertir BGR -> RGB")
     g.add_argument("--pad", action=argparse.BooleanOptionalAction, default=False, help="Cuadrar con margen negro antes de redimensionar")
     g.add_argument("--preprocessing", choices=["baseline", "hair_removal", "color_constancy", "contrast_focused"],
@@ -738,7 +742,7 @@ def parse_args():
     g.add_argument("--thr-mode", type=parse_thr_mode, default="f1", help="'f1', 'sensitivity' o un número fijo (p. ej. 0.5)")
     g.add_argument("--min-sensitivity", type=float, default=0.85, help="Usado si thr-mode='sensitivity'")
     g = p.add_argument_group("salida")
-    g.add_argument("--name", default="B1_binario_B4_128", help="Nombre de la ejecución")
+    g.add_argument("--name", default="B1_binario_B4_224", help="Nombre de la ejecución")
     g.add_argument("--output-dir", default="runs", help="Carpeta donde se crea runs/<name>_<fecha>/")
     g.add_argument("--quick", action="store_true", help="Prueba rápida: 30 img/clase, B0, 1 época, sin fine-tuning")
     args = p.parse_args()
