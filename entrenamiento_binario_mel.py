@@ -74,7 +74,6 @@ from tensorflow.keras.applications import EfficientNetB0, EfficientNetB4
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
 from preprocessing import preprocess_pipeline
-from preprocessing import preprocess_pipeline
 
 
 # ======================================================================================
@@ -353,7 +352,7 @@ def plot_history(df, path, title):
     panels = [(c, t) for c, t in [("accuracy", "Accuracy"), ("loss", "Loss"), ("auc", "AUC")] if c in df.columns]
     fig, axes = plt.subplots(1, len(panels), figsize=(5.5 * len(panels), 4))
     axes = np.atleast_1d(axes)
-    boundaries = df.index[df["phase"] != df["fase"].shift()].tolist()[1:]  # phase changes
+    boundaries = df.index[df["phase"] != df["phase"].shift()].tolist()[1:]  # phase changes
     for ax, (col, label) in zip(axes, panels):
         ax.plot(df["epoch"], df[col], label=f"train_{col}")
         ax.plot(df["epoch"], df[f"val_{col}"], label=f"val_{col}")
@@ -379,7 +378,7 @@ def plot_stage1(y, p, thr, path, title):
     axes[0].legend(loc="lower right")
     axes[1].plot(rec, prec)
     axes[1].axhline(y.mean(), color="k", ls="--", lw=0.8, label="chance (prevalence)")
-    axes[1].scatter([m["sensitivity"]], [m["precition"]], color="red", zorder=3, label=f"threshold {thr:.2f}")
+    axes[1].scatter([m["sensitivity"]], [m["precision"]], color="red", zorder=3, label=f"threshold {thr:.2f}")
     axes[1].set(xlabel="recall (mel)", ylabel="precisión (mel)",
                 title=f"Precition-Recall (AP = {average_precision_score(y, p):.3f})")
     axes[1].legend(loc="upper right")
