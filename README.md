@@ -233,3 +233,7 @@ Not tracked by git (see `.gitignore`): the HAM10000 images, the `Datasets*` fold
 ### Note on output file names
 
 The runs in `runs_dataleakage_fixed/` were produced before the scripts were translated to English, so their files have Spanish names (`metricas.json`, `predicciones_validacion.csv`, `historial_epocas.csv`, `resumen_entrenamiento.txt`, `consola.log`). The current scripts write English names (`metrics.json`, `validation_predictions.csv`, `epoch_history.csv`, …). The loaders in Section 11 of the notebook accept both versions, so old and new runs can be analysed together.
+
+### Note about IA use
+
+Claude was used to solve issues ocurred during the transaltion of some code to english and creating the final structure of the README file
