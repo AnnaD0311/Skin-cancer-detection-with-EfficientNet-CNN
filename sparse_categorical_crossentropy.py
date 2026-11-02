@@ -71,7 +71,7 @@ from preprocessing import preprocess_pipeline
 
 
 # ======================================================================================
-# Utilidades generales
+# General Utilities
 # ======================================================================================
 def fmt_dur(seconds):
     seconds = int(round(seconds))
@@ -81,7 +81,7 @@ def fmt_dur(seconds):
 
 
 class Tee:
-    """Duplica lo que se imprime en consola hacia un archivo de log."""
+    """Duplicates console prints to a log file."""
 
     def __init__(self, *streams):
         self.streams = streams
@@ -100,7 +100,7 @@ class Tee:
 
 
 def make_event_logger(events, t0):
-    """Devuelve una función que registra (y muestra) eventos con marca de tiempo."""
+    """Returns a function that logs (and displays) timestamped events."""
     def event(msg):
         line = f"[{fmt_dur(time.time() - t0)}] {msg}"
         events.append(line)
@@ -125,19 +125,19 @@ def get_lr(model):
 
 
 # ======================================================================================
-# Dataset: organización en carpetas y carga
+# Dataset: Folder Organization and Loading
 # ======================================================================================
 def prepare_dataset(base_dir, dataset_dir, seed=42):
-    """Copia las imágenes del HAM10000 a Datasets/training|validation/<dx>/ (split 80/20 por lesión)."""
+    """Copies HAM10000 images to Datasets/training|validation/<dx>/ (80/20 split per lesion)."""
     from sklearn.model_selection import GroupShuffleSplit
 
     base_dir, dataset_dir = Path(base_dir), Path(dataset_dir)
     metadata = pd.read_csv(base_dir / "HAM10000_metadata.csv")
     paths = {f.stem: f for f in base_dir.rglob("*.jpg") if dataset_dir not in f.parents}
     metadata["path"] = metadata["image_id"].map(paths)
-    print(f"Imágenes encontradas: {metadata['path'].notna().sum()} de {len(metadata)}")
+    print(f"Images found: {metadata['path'].notna().sum()} of {len(metadata)}")
     metadata = metadata.dropna(subset=["path"]).reset_index(drop=True)
-    assert len(metadata) > 0, "Ninguna imagen encontrada: revisa --base-dir (CSV + imágenes)."
+    assert len(metadata) > 0, "No images found: check --base-dir (CSV + images)."
 
     gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=seed)
     train_idx, val_idx = next(gss.split(metadata, groups=metadata["lesion_id"]))
@@ -146,7 +146,7 @@ def prepare_dataset(base_dir, dataset_dir, seed=42):
             dest = dataset_dir / split / row["dx"]
             dest.mkdir(parents=True, exist_ok=True)
             shutil.copy(row["path"], dest / row["path"].name)
-    print("Dataset organizado en", dataset_dir)
+    print("Dataset organized in", dataset_dir)
 
 
 def count_images(folder, categories):
@@ -159,13 +159,13 @@ def load_image(path, img_size=224, to_rgb=False, pad=False, preprocessing_method
         return None
 
     if preprocessing_method != "baseline":
-        # preprocess_pipeline trabaja en RGB, recorta/redimensiona a target_size y aplica el método.
-        # (--pad no se usa aquí: el pipeline ya devuelve la imagen cuadrada.)
+        # preprocess_pipeline works in RGB, crops/resizes to target_size and applies the method.
+        # (--pad is not used here: the pipeline already returns a square image.)
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_rgb = preprocess_pipeline(img_rgb, target_size=(img_size, img_size), method=preprocessing_method)
         return img_rgb if to_rgb else cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
 
-    if pad:  # cuadrar con margen negro sin deformar la lesión
+    if pad:  # make square with a black border without deforming the lesion
         h, w = img.shape[:2]
         s = max(h, w)
         top, left = (s - h) // 2, (s - w) // 2
@@ -198,7 +198,7 @@ def load_split(folder, categories, img_size, to_rgb, pad, limit=None, preprocess
 
 
 # ======================================================================================
-# Modelo Multiclase
+# Multiclass Model
 # ======================================================================================
 def make_augmentation():
     return Sequential([RandomFlip("horizontal_and_vertical"), RandomRotation(0.2), RandomZoom(0.1)],
@@ -214,7 +214,7 @@ def compile_multiclass(model, lr, num_classes):
 def build_multiclass_model(variant, img_size, augment, pretrained, head_lr, num_classes):
     Base = {"B0": EfficientNetB0, "B4": EfficientNetB4}[variant]
     base = Base(include_top=False, weights=pretrained, input_shape=(img_size, img_size, 3))
-    base.trainable = False  # fase 1: solo aprende la cabeza
+    base.trainable = False  # phase 1: train head only
 
     inputs = Input(shape=(img_size, img_size, 3))
     x = make_augmentation()(inputs) if augment else inputs
@@ -236,7 +236,7 @@ def unfreeze_top_layers(model, base, n_layers, lr, num_classes):
         layer.trainable = False
     for layer in base.layers:
         if isinstance(layer, BatchNormalization):
-            layer.trainable = False  # conserva estadísticas de ImageNet
+            layer.trainable = False  # preserve ImageNet statistics
     compile_multiclass(model, lr, num_classes)
 
 
@@ -252,7 +252,7 @@ def get_class_weights(y, mode, num_classes):
 
 
 # ======================================================================================
-# Registro del entrenamiento
+# Training Logging
 # ======================================================================================
 class PhaseLogger(tf.keras.callbacks.Callback):
     def __init__(self, phase, rows, event_fn, epochs_planned):
@@ -263,9 +263,9 @@ class PhaseLogger(tf.keras.callbacks.Callback):
 
     def on_train_begin(self, logs=None):
         self.lr_start = get_lr(self.model)
-        self.event(f"[{self.phase}] inicio | lr inicial={self.lr_start:.2e} | "
-                   f"parámetros entrenables={count_params(self.model.trainable_weights):,} | "
-                   f"épocas máx.={self.planned}")
+        self.event(f"[{self.phase}] start | initial lr={self.lr_start:.2e} | "
+                   f"trainable parameters={count_params(self.model.trainable_weights):,} | "
+                   f"max epochs={self.planned}")
 
     def on_epoch_begin(self, epoch, logs=None):
         self._t = time.time()
@@ -274,16 +274,16 @@ class PhaseLogger(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         logs = {k: float(v) for k, v in (logs or {}).items() if k not in ("lr", "learning_rate")}
         self.n += 1
-        self.rows.append({"fase": self.phase, "epoca": len(self.rows) + 1, "epoca_fase": epoch + 1,
-                          "lr": self._lr_epoch, "segundos": round(time.time() - self._t, 1), **logs})
+        self.rows.append({"phase": self.phase, "epoch": len(self.rows) + 1, "phase_epoch": epoch + 1,
+                          "lr": self._lr_epoch, "seconds": round(time.time() - self._t, 1), **logs})
         v = logs.get("val_loss")
         if v is not None and v < self.best_val_loss:
             self.best_val_loss, self.best_epoch = v, epoch + 1
-            self.event(f"[{self.phase}] época {epoch + 1}: nuevo mejor val_loss={v:.4f} "
+            self.event(f"[{self.phase}] epoch {epoch + 1}: new best val_loss={v:.4f} "
                        f"(val_accuracy={logs.get('val_accuracy', float('nan')):.4f})")
         lr_now = get_lr(self.model)
         if lr_now < self._lr_epoch * 0.999:
-            self.event(f"[{self.phase}] ReduceLROnPlateau tras la época {epoch + 1}: "
+            self.event(f"[{self.phase}] ReduceLROnPlateau after epoch {epoch + 1}: "
                        f"lr {self._lr_epoch:.2e} -> {lr_now:.2e}")
 
 
@@ -296,29 +296,29 @@ def fit_phase(model, name, X, Y, Xv, Yv, epochs, batch_size, class_weight, rows,
               class_weight=class_weight, callbacks=[es, rlr, logger], verbose=2)
     stopped_early = logger.n < epochs
     if stopped_early:
-        event(f"[{name}] EarlyStopping: detenido tras {logger.n} de {epochs} épocas; "
-              f"mejor época={logger.best_epoch} (val_loss={logger.best_val_loss:.4f})")
+        event(f"[{name}] EarlyStopping: stopped after {logger.n} of {epochs} epochs; "
+              f"best epoch={logger.best_epoch} (val_loss={logger.best_val_loss:.4f})")
     else:
-        event(f"[{name}] completadas las {epochs} épocas (mejor época={logger.best_epoch})")
-    return dict(fase=name, epocas_max=epochs, epocas_ejecutadas=logger.n, early_stopping=stopped_early,
-                mejor_epoca=logger.best_epoch, mejor_val_loss=float(logger.best_val_loss),
-                lr_inicial=logger.lr_start, lr_final=get_lr(model), segundos=round(time.time() - t0, 1))
+        event(f"[{name}] completed all {epochs} epochs (best epoch={logger.best_epoch})")
+    return dict(phase=name, max_epochs=epochs, executed_epochs=logger.n, early_stopping=stopped_early,
+                best_epoch=logger.best_epoch, best_val_loss=float(logger.best_val_loss),
+                initial_lr=logger.lr_start, final_lr=get_lr(model), seconds=round(time.time() - t0, 1))
 
 
 # ======================================================================================
-# Gráficos y Métricas Multiclase
+# Multiclass Plots and Metrics
 # ======================================================================================
 def plot_history(df, path, title):
     panels = [(c, t) for c, t in [("accuracy", "Accuracy"), ("loss", "Loss")] if c in df.columns]
     fig, axes = plt.subplots(1, len(panels), figsize=(5.5 * len(panels), 4))
     axes = np.atleast_1d(axes)
-    boundaries = df.index[df["fase"] != df["fase"].shift()].tolist()[1:]
+    boundaries = df.index[df["phase"] != df["phase"].shift()].tolist()[1:]
     for ax, (col, label) in zip(axes, panels):
-        ax.plot(df["epoca"], df[col], label=f"train_{col}")
-        ax.plot(df["epoca"], df[f"val_{col}"], label=f"val_{col}")
+        ax.plot(df["epoch"], df[col], label=f"train_{col}")
+        ax.plot(df["epoch"], df[f"val_{col}"], label=f"val_{col}")
         for b in boundaries:
-            ax.axvline(df.loc[b, "epoca"] - 0.5, color="gray", ls="--", lw=1)
-        ax.set_xlabel("Época"); ax.set_ylabel(label); ax.set_title(label); ax.legend()
+            ax.axvline(df.loc[b, "epoch"] - 0.5, color="gray", ls="--", lw=1)
+        ax.set_xlabel("Epoch"); ax.set_ylabel(label); ax.set_title(label); ax.legend()
     fig.suptitle(title)
     fig.tight_layout()
     fig.savefig(path, dpi=130)
@@ -330,17 +330,17 @@ def plot_confusion_matrix(y_true, y_pred, categories, path, title):
     fig, ax = plt.subplots(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", cbar=False, ax=ax,
                 xticklabels=categories, yticklabels=categories)
-    ax.set(xlabel="Predicho", ylabel="Real", title=f"Matriz de confusión — {title}")
+    ax.set(xlabel="Predicted", ylabel="True", title=f"Confusion Matrix — {title}")
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
 
 
 # ======================================================================================
-# Construcción del informe .txt
+# .txt Report Construction
 # ======================================================================================
 def _df_txt(df, **kw):
-    sci = {c: (lambda v: f"{v:.2e}") for c in ("lr", "lr_inicial", "lr_final") if c in df.columns}
+    sci = {c: (lambda v: f"{v:.2e}") for c in ("lr", "initial_lr", "final_lr") if c in df.columns}
     return df.to_string(index=False, float_format=lambda v: f"{v:.4f}", formatters=sci, **kw)
 
 
@@ -354,72 +354,72 @@ def build_report(ctx):
         L.append(f"{k:<34}: {v}")
 
     a = ctx.get("args", {})
-    L.append("RESUMEN DEL ENTRENAMIENTO MULTICLASE (7 clases) — HAM10000")
-    L.append("Uso exclusivamente educativo — no sirve para diagnóstico clínico.")
+    L.append("MULTICLASS TRAINING SUMMARY (7 classes) — HAM10000")
+    L.append("Educational use only — not for clinical diagnosis.")
 
-    section("1. RESUMEN EJECUTIVO")
-    kv("Nombre de la ejecución", a.get("name"))
-    kv("Estado", ctx.get("status"))
-    kv("Inicio", ctx.get("start"))
-    kv("Fin", ctx.get("end"))
-    kv("Duración total", fmt_dur(ctx.get("elapsed", 0)))
+    section("1. EXECUTIVE SUMMARY")
+    kv("Run name", a.get("name"))
+    kv("Status", ctx.get("status"))
+    kv("Start time", ctx.get("start"))
+    kv("End time", ctx.get("end"))
+    kv("Total duration", fmt_dur(ctx.get("elapsed", 0)))
     phases = ctx.get("phases", [])
     if phases:
-        kv("Épocas ejecutadas (total)", sum(p["epocas_ejecutadas"] for p in phases))
+        kv("Executed epochs (total)", sum(p["executed_epochs"] for p in phases))
     ev = ctx.get("eval")
     if ev:
-        kv("Accuracy global (validación)", f"{ev['accuracy']:.4f}")
-        kv("Loss (validación)", f"{ev['val_loss']:.4f}")
+        kv("Global accuracy (validation)", f"{ev['accuracy']:.4f}")
+        kv("Loss (validation)", f"{ev['val_loss']:.4f}")
 
-    section("2. ENTORNO")
+    section("2. ENVIRONMENT")
     for k, v in ctx.get("env", {}).items():
         kv(k, v)
-    kv("Comando", ctx.get("cmd"))
+    kv("Command", ctx.get("cmd"))
 
-    section("3. CONFIGURACIÓN")
+    section("3. CONFIGURATION")
     for k, v in a.items():
         kv(k, v)
 
     d = ctx.get("dataset")
-    section("4. DATOS")
+    section("4. DATA")
     if d:
-        kv("Carpeta de entrenamiento", d["train_folder"])
-        kv("Carpeta de validación", d["val_folder"])
-        kv("Clases", ", ".join(d["categories"]))
+        kv("Training folder", d["train_folder"])
+        kv("Validation folder", d["val_folder"])
+        kv("Classes", ", ".join(d["categories"]))
         L.append("")
-        tab = pd.DataFrame({"clase": d["categories"],
-                            "entrenamiento": [d["counts_train"].get(c, 0) for c in d["categories"]],
-                            "validacion": [d["counts_val"].get(c, 0) for c in d["categories"]]})
+        tab = pd.DataFrame({"class": d["categories"],
+                            "training": [d["counts_train"].get(c, 0) for c in d["categories"]],
+                            "validation": [d["counts_val"].get(c, 0) for c in d["categories"]]})
         L.append(tab.to_string(index=False))
         L.append("")
-        kv("Imágenes cargadas (train / val)", f"{d['n_train']} / {d['n_val']}")
-        kv("Pre-procesamiento", a.get("preprocessing"))
-        kv("Pesos de clase", str(ctx.get("class_weights")))
+        kv("Loaded images (train / val)", f"{d['n_train']} / {d['n_val']}")
+        kv("Preprocessing", a.get("preprocessing"))
+        kv("Class weights", str(ctx.get("class_weights")))
 
-    section("5. MODELO")
+    section("5. MODEL")
     mo = ctx.get("model")
     if mo:
-        kv("Arquitectura", f"EfficientNet{a.get('variant')} + GlobalMaxPool + Dense(256) + BN + Dropout(0.5) + Dense(7, softmax)")
-        kv("Parámetros totales", f"{mo['params_total']:,}")
+        kv("Architecture", f"EfficientNet{a.get('variant')} + GlobalMaxPool + Dense(256) + BN + Dropout(0.5) + Dense(7, softmax)")
+        kv("Total parameters", f"{mo['params_total']:,}")
         L.append("")
         L.extend(mo["summary"])
 
-    section("6. ENTRENAMIENTO")
+    section("6. TRAINING")
     if phases:
         L.append(_df_txt(pd.DataFrame(phases)))
     hist = ctx.get("history")
     if hist is not None and len(hist):
         L.append("")
-        L.append("Métricas por época:")
+        L.append("Metrics per epoch:")
         L.append(_df_txt(hist))
 
-    section("7. EVALUACIÓN EN VALIDACIÓN")
+    section("7. VALIDATION EVALUATION")
     if ev:
-        L.append("Informe de clasificación por clase:")
+        L.append("Per-class classification report:")
         L.append(ev["report"])
 
-    section("8. ARCHIVOS GENERADOS")
-    L.extend(ctx.get("files", []) or ["(ninguno)"])
+    section("8. GENERATED FILES")
+    L.extend(ctx.get("files", []) or ["(none)"])
 
     return "\n".join(L) + "\n"
 
@@ -428,14 +428,14 @@ def derive_warnings(ctx):
     w = []
     d = ctx.get("dataset")
     if d and d["n_val"] < 100:
-        w.append("Conjunto de validación pequeño.")
+        w.append("Small validation set.")
     if not w:
-        w.append("Sin avisos automáticos relevantes.")
+        w.append("No relevant automated warnings.")
     return w
 
 
 # ======================================================================================
-# Ejecución principal
+# Main Execution
 # ======================================================================================
 def run_training(args, run_dir, ctx, event):
     files = ctx["files"]
@@ -444,19 +444,19 @@ def run_training(args, run_dir, ctx, event):
     dataset_dir = Path(args.dataset_dir)
     if not (dataset_dir / "training").exists():
         if args.base_dir:
-            event(f"Organizando dataset en {dataset_dir} ...")
+            event(f"Organizing dataset in {dataset_dir} ...")
             prepare_dataset(args.base_dir, dataset_dir, seed=args.seed)
         else:
-            raise FileNotFoundError(f"No existe {dataset_dir}/training. Usa --base-dir para organizarlo.")
+            raise FileNotFoundError(f"{dataset_dir}/training does not exist. Use --base-dir to organize it.")
     train_folder, val_folder = str(dataset_dir / "training"), str(dataset_dir / "validation")
     categories = sorted(os.listdir(train_folder))
     num_classes = len(categories)
-    event(f"Clases detectadas ({num_classes}): {categories}")
+    event(f"Detected classes ({num_classes}): {categories}")
 
     counts_train, counts_val = count_images(train_folder, categories), count_images(val_folder, categories)
 
     t_load = time.time()
-    event(f"Cargando imágenes multiclase ({args.img_size}x{args.img_size}, rgb={args.rgb}, pad={args.pad}, "
+    event(f"Loading multiclass images ({args.img_size}x{args.img_size}, rgb={args.rgb}, pad={args.pad}, "
           f"preprocessing={args.preprocessing}, limit_per_class={args.limit_per_class}) ...")
     X_tr, Y_tr, _, failed_tr = load_split(train_folder, categories, args.img_size, args.rgb, args.pad,
                                           args.limit_per_class, preprocessing_method=args.preprocessing)
@@ -469,53 +469,53 @@ def run_training(args, run_dir, ctx, event):
                           failed_train=failed_tr, failed_val=failed_val)
 
     cw = get_class_weights(Y_tr, args.class_weights, num_classes)
-    ctx["class_weights"] = {categories[k]: round(v, 3) for k, v in cw.items()} if cw else "ninguno"
+    ctx["class_weights"] = {categories[k]: round(v, 3) for k, v in cw.items()} if cw else "none"
 
     tf.keras.backend.clear_session()
     gc.collect()
     tf.keras.utils.set_random_seed(args.seed)
     pretrained = None if args.pretrained == "none" else args.pretrained
     
-    event(f"Construyendo EfficientNet{args.variant} (multiclase, 7 salidas) ...")
+    event(f"Building EfficientNet{args.variant} (multiclass, 7 outputs) ...")
     model, base = build_multiclass_model(args.variant, args.img_size, args.augment, pretrained, args.head_lr, num_classes)
     summary_lines = []
     model.summary(print_fn=lambda s, **kw: summary_lines.append(s))
     ctx["model"] = dict(params_total=model.count_params(), summary=summary_lines)
 
     rows, phases = [], ctx["phases"]
-    phases.append(fit_phase(model, "fase1_cabeza", X_tr, Y_tr, X_va, Y_va, args.epochs_head,
+    phases.append(fit_phase(model, "phase1_head", X_tr, Y_tr, X_va, Y_va, args.epochs_head,
                             args.batch_size, cw, rows, event))
     if args.fine_tune:
         unfreeze_top_layers(model, base, args.ft_layers, args.ft_lr, num_classes)
-        event(f"Fine-tuning: descongelando últimas {args.ft_layers} capas, lr={args.ft_lr:.0e}")
-        phases.append(fit_phase(model, "fase2_finetuning", X_tr, Y_tr, X_va, Y_va, args.epochs_ft,
+        event(f"Fine-tuning: unfreezing last {args.ft_layers} layers, lr={args.ft_lr:.0e}")
+        phases.append(fit_phase(model, "phase2_finetuning", X_tr, Y_tr, X_va, Y_va, args.epochs_ft,
                                 args.batch_size, cw, rows, event))
     
     hist = pd.DataFrame(rows)
     ctx["history"] = hist
-    hist.to_csv(run_dir / "historial_epocas.csv", index=False)
-    files.append("historial_epocas.csv")
-    plot_history(hist, run_dir / "curvas_entrenamiento.png", f"{args.name} — Multiclase 7 clases")
-    files.append("curvas_entrenamiento.png")
+    hist.to_csv(run_dir / "epoch_history.csv", index=False)
+    files.append("epoch_history.csv")
+    plot_history(hist, run_dir / "training_curves.png", f"{args.name} — 7-class Multiclass")
+    files.append("training_curves.png")
 
-    event("Evaluando en validación ...")
+    event("Evaluating on validation set ...")
     preds = model.predict(X_va, batch_size=64, verbose=0)
     y_pred_classes = np.argmax(preds, axis=1)
     val_loss, val_acc = model.evaluate(X_va, Y_va, batch_size=64, verbose=0)[:2]
 
     report = classification_report(Y_va, y_pred_classes, target_names=categories, zero_division=0)
-    plot_confusion_matrix(Y_va, y_pred_classes, categories, run_dir / "matriz_confusion.png", args.name)
-    files.append("matriz_confusion.png")
+    plot_confusion_matrix(Y_va, y_pred_classes, categories, run_dir / "confusion_matrix.png", args.name)
+    files.append("confusion_matrix.png")
 
     ctx["eval"] = dict(accuracy=float(val_acc), val_loss=float(val_loss), report=report)
 
-    pred_df = pd.DataFrame(files_va, columns=["archivo"])
-    pred_df["clase_real"] = [categories[i] for i in Y_va]
-    pred_df["clase_predicha"] = [categories[i] for i in y_pred_classes]
+    pred_df = pd.DataFrame(files_va, columns=["file"])
+    pred_df["true_class"] = [categories[i] for i in Y_va]
+    pred_df["predicted_class"] = [categories[i] for i in y_pred_classes]
     for idx, cat in enumerate(categories):
         pred_df[f"prob_{cat}"] = preds[:, idx]
-    pred_df.to_csv(run_dir / "predicciones_validacion.csv", index=False)
-    files.append("predicciones_validacion.csv")
+    pred_df.to_csv(run_dir / "validation_predictions.csv", index=False)
+    files.append("validation_predictions.csv")
 
     model_path = run_dir / f"{args.name}_multiclass.keras"
     model.save(model_path)
@@ -525,26 +525,26 @@ def run_training(args, run_dir, ctx, event):
     (run_dir / f"{args.name}_multiclass.json").write_text(json.dumps(meta, indent=2))
     files.append(f"{args.name}_multiclass.json")
 
-    (run_dir / "metricas.json").write_text(json.dumps(
-        dict(config={k: str(v) for k, v in vars(args).items()}, fases=phases, evaluacion=ctx["eval"]),
+    (run_dir / "metrics.json").write_text(json.dumps(
+        dict(config={k: str(v) for k, v in vars(args).items()}, phases=phases, evaluation=ctx["eval"]),
         indent=2, default=float))
-    files.append("metricas.json")
+    files.append("metrics.json")
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Entrenamiento multiclase 7 clases (HAM10000)",
+    p = argparse.ArgumentParser(description="7-class Multiclass Training (HAM10000)",
                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    g = p.add_argument_group("datos")
-    g.add_argument("--base-dir", default=None, help="Carpeta con HAM10000_metadata.csv + imágenes")
-    g.add_argument("--dataset-dir", default=None, help="Carpeta con training/ y validation/")
-    g.add_argument("--limit-per-class", type=int, default=None, help="Máx. imágenes por clase")
-    g = p.add_argument_group("pre-procesado")
+    g = p.add_argument_group("data")
+    g.add_argument("--base-dir", default=None, help="Folder containing HAM10000_metadata.csv + images")
+    g.add_argument("--dataset-dir", default=None, help="Folder containing training/ and validation/")
+    g.add_argument("--limit-per-class", type=int, default=None, help="Max images per class")
+    g = p.add_argument_group("preprocessing")
     g.add_argument("--img-size", type=int, default=224)
     g.add_argument("--rgb", action=argparse.BooleanOptionalAction, default=True)
     g.add_argument("--pad", action=argparse.BooleanOptionalAction, default=False)
     g.add_argument("--preprocessing", choices=["baseline", "hair_removal", "color_constancy", "contrast_focused"],
-                   default="baseline", help="Técnica de pre-procesamiento a aplicar de preprocessing.py")
-    g = p.add_argument_group("modelo / entrenamiento")
+                   default="baseline", help="Preprocessing technique to apply from preprocessing.py")
+    g = p.add_argument_group("model / training")
     g.add_argument("--variant", choices=["B0", "B4"], default="B4")
     g.add_argument("--pretrained", choices=["imagenet", "none"], default="imagenet")
     g.add_argument("--augment", action=argparse.BooleanOptionalAction, default=True)
@@ -557,16 +557,16 @@ def parse_args():
     g.add_argument("--ft-lr", type=float, default=1e-5)
     g.add_argument("--batch-size", type=int, default=32)
     g.add_argument("--seed", type=int, default=42)
-    g = p.add_argument_group("salida")
-    g.add_argument("--name", default="B7_multiclase_B4_224", help="Nombre de la ejecución")
-    g.add_argument("--output-dir", default="runs_dataleakage_fixed", help="Carpeta de salida")
-    g.add_argument("--quick", action="store_true", help="Prueba rápida")
+    g = p.add_argument_group("output")
+    g.add_argument("--name", default="B7_multiclass_B4_224", help="Run name")
+    g.add_argument("--output-dir", default="runs_dataleakage_fixed", help="Output folder")
+    g.add_argument("--quick", action="store_true", help="Quick test run")
     args = p.parse_args()
 
     if args.quick:
         args.limit_per_class, args.variant, args.epochs_head, args.fine_tune = 30, "B0", 1, False
         if args.name == p.get_default("name"):
-            args.name = "TESTE_RAPIDO_multiclase"
+            args.name = "QUICK_TEST_multiclass"
     if args.dataset_dir is None:
         args.dataset_dir = str(Path(args.base_dir) / "Datasets") if args.base_dir else "Datasets"
     return args
@@ -578,7 +578,7 @@ def main():
     run_dir = Path(args.output_dir) / f"{args.name}_{started:%Y%m%d_%H%M%S}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    console_log = open(run_dir / "consola.log", "w", encoding="utf-8")
+    console_log = open(run_dir / "console.log", "w", encoding="utf-8")
     sys.stdout = Tee(sys.__stdout__, console_log)
 
     gpus = tf.config.list_physical_devices("GPU")
@@ -592,16 +592,16 @@ def main():
     events = []
     event = make_event_logger(events, t0)
     ctx = dict(args=vars(args).copy(), cmd=" ".join(sys.argv), env={}, start=f"{started:%Y-%m-%d %H:%M:%S}",
-               events=events, files=[], phases=[], status="EN CURSO", run_dir=str(run_dir))
+               events=events, files=[], phases=[], status="IN PROGRESS", run_dir=str(run_dir))
     ctx["args"]["dataset_dir"] = args.dataset_dir
 
     exit_code = 0
     try:
-        event(f"Ejecución multiclase '{args.name}' — resultados en {run_dir}")
+        event(f"Multiclass run '{args.name}' — results in {run_dir}")
         run_training(args, run_dir, ctx, event)
-        ctx["status"] = "COMPLETADO"
+        ctx["status"] = "COMPLETED"
     except BaseException as e:
-        ctx["status"] = "INTERRUMPIDO" if isinstance(e, KeyboardInterrupt) else "ERROR"
+        ctx["status"] = "INTERRUPTED" if isinstance(e, KeyboardInterrupt) else "ERROR"
         ctx["error"] = traceback.format_exc()
         event(f"{ctx['status']}: {type(e).__name__}: {e}")
         exit_code = 1
@@ -609,10 +609,10 @@ def main():
         ctx["elapsed"] = time.time() - t0
         ctx["end"] = f"{dt.datetime.now():%Y-%m-%d %H:%M:%S}"
         ctx["warnings"] = derive_warnings(ctx)
-        ctx["files"] += ["resumen_entrenamiento.txt", "consola.log"]
-        report_path = run_dir / "resumen_entrenamiento.txt"
+        ctx["files"] += ["training_summary.txt", "console.log"]
+        report_path = run_dir / "training_summary.txt"
         report_path.write_text(build_report(ctx), encoding="utf-8")
-        print(f"\nResumen escrito en: {report_path}")
+        print(f"\nSummary written to: {report_path}")
         sys.stdout = sys.__stdout__
         console_log.close()
     sys.exit(exit_code)

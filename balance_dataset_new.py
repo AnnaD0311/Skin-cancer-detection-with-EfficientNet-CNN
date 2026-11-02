@@ -1,5 +1,5 @@
 
-#!/usr/bin/env python3
+#!/usr/bin/env python3 TRANSLATION CHECKED
 # -*- coding: utf-8 -*-
 
 """

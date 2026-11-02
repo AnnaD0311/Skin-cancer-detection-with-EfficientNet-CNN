@@ -2,6 +2,7 @@
 Preprocessing Module for Dermatoscopic Skin Lesion Analysis (HAM10000)
 Based on methods from Aakaou et al. (2026): Contrast-Focused Preprocessing...
 """
+# TRANSLATE CHECKED
 
 import cv2
 import numpy as np

@@ -24,11 +24,11 @@ TARGET_COUNT = 1000
 
 def remove_black_borders(img_pil):
     """
-    Detecta y recorta automáticamente las bandas o bordes negros laterales/superiores.
+    Automatically detects and crops black bars or edges on the sides/top.    
     """
     img_np = np.array(img_pil)
     
-    # Mascara de píxeles que no son completamente negros (umbral de tolerancia = 10)
+    # Mask pixels that are not completely black (tolerance threshold = 10)
     non_black_mask = np.any(img_np > 10, axis=2)
     
     # Encontrar las coordenadas extremas con información de imagen
@@ -36,36 +36,36 @@ def remove_black_borders(img_pil):
     cols = np.any(non_black_mask, axis=0)
     
     if not np.any(rows) or not np.any(cols):
-        return img_pil # Si falla la detección, retorna la imagen original
+        return img_pil # Finding extreme coordinates using image information
         
     rmin, rmax = np.where(rows)[0][[0, -1]]
     cmin, cmax = np.where(cols)[0][[0, -1]]
     
-    # Recortar la bounding box limpia de la imagen
+    # Finding extreme coordinates using image information
     cropped_np = img_np[rmin:rmax+1, cmin:cmax+1]
     return Image.fromarray(cropped_np)
 
 def apply_augmentation(img):
     """
-    Aplica rotaciones ortogonales (90°, 180°, 270°) y remueve estrictamente 
-    cualquier banda negra producida por la relación de aspecto rectangular.
+    Apply orthogonal rotations (90°, 180°, 270°) and strictly remove any black 
+    bars resulting from a rectangular aspect ratio.
     """
-    # 1. Elegir un ángulo ortogonal
+    # 1. Choose an orthogonal angle
     angle = random.choice([0, 90, 180, 270])
     
-    # 2. Rotar la imagen (expand=True ajusta el lienzo al nuevo alto/ancho)
+    # 2. Rotate the image (expand=True adjusts the canvas to the new height/width)
     if angle != 0:
         img = TF.rotate(img, angle=angle, expand=True)
     
-    # 3. Eliminar activamente los bordes negros si existen
+    # 3. Actively remove black borders, if present
     img = remove_black_borders(img)
     
-    # 4. Inversiones y ajustes de color sin deformaciones
+    # 4. Color inversions and adjustments without distortion
     transforms_pipeline = transforms.Compose([
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomVerticalFlip(p=0.5),
         transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.15),
-        # Redimensionado final uniforme (ej. 224x224 para la red neuronal)
+        # Uniform final resizing (e.g., 224x224 for the neural network)
         transforms.Resize((224, 224), interpolation=TF.InterpolationMode.BILINEAR)
     ])
     
@@ -83,7 +83,7 @@ def load_and_preprocess(src_path, method="contrast_focused"):
     cleaned_pil = remove_black_borders(raw_pil)
     img_np = np.array(cleaned_pil)
     
-    # Aplica o teu preprocessing.py
+    # Apply preprocessing.py
     processed_np = preprocess_pipeline(img_np, target_size=(224, 224), method=method)
     return Image.fromarray(processed_np)
 
@@ -93,7 +93,7 @@ def balance_dataset(method="contrast_focused"):
 
     os.makedirs(BALANCED_DIR, exist_ok=True)
 
-    print(f"Iniciando balanceo de clases con pre-procesamiento '{method}'...")
+    print(f"Initiating class balancing with pre-processing '{method}'...")
 
     for cls in classes:
         cls_dir = os.path.join(BALANCED_DIR, cls)
@@ -104,9 +104,9 @@ def balance_dataset(method="contrast_focused"):
         num_images = len(image_ids)
 
         if num_images >= TARGET_COUNT:
-            # Undersampling (recorte de la clase nv)
+            # Undersampling (nv class crop)
             selected_ids = cls_df.sample(n=TARGET_COUNT, random_state=42)['image_id'].tolist()
-            for img_id in tqdm(selected_ids, desc=f"Recortando {cls}"):
+            for img_id in tqdm(selected_ids, desc=f"Cutting {cls}"):
                 src_path = find_image_path(img_id)
                 if src_path:
                     img_prep = load_and_preprocess(src_path, method=method)
@@ -114,16 +114,16 @@ def balance_dataset(method="contrast_focused"):
 
         else:
             # Oversampling + Data Augmentation
-            print(f"\nAumentando clase {cls} ({num_images} -> {TARGET_COUNT})...")
+            print(f"\nAugmenting class {cls} ({num_images} -> {TARGET_COUNT})...")
 
-            # Guardar originales ajustadas
+            # Save adjusted originals
             for img_id in image_ids:
                 src_path = find_image_path(img_id)
                 if src_path:
                     img_prep = load_and_preprocess(src_path, method=method)
                     img_prep.save(os.path.join(cls_dir, f"{img_id}.jpg"))
 
-            # Generar imágenes aumentadas
+            # Generate augmented images
             aug_needed = TARGET_COUNT - num_images
             i = 0
             pbar = tqdm(total=aug_needed, desc=f"Augmenting {cls}")
@@ -137,7 +137,7 @@ def balance_dataset(method="contrast_focused"):
                     if src_path:
                         img_prep = load_and_preprocess(src_path, method=method)
                         
-                        # Generar aumentada 100% limpia sin bordes negros
+                        # Generate a 100% clean, upscaled image with no black borders
                         aug_img = apply_augmentation(img_prep)
 
                         out_path = os.path.join(cls_dir, f"{img_id}_aug_{i}.jpg")
@@ -146,16 +146,16 @@ def balance_dataset(method="contrast_focused"):
                         pbar.update(1)
             pbar.close()
 
-    print(f"\n¡Dataset balanceado guardado en: {BALANCED_DIR}!")
+    print(f"\n Balanced Dataset saved in: {BALANCED_DIR}!")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Balanceamento do dataset HAM10000 com pre-processamento.")
+    parser = argparse.ArgumentParser(description="Balancing the HAM10000 dataset with pre-processing.")
     parser.add_argument(
         "--method",
         type=str,
         default="contrast_focused",
         choices=["baseline", "hair_removal", "color_constancy", "contrast_focused"],
-        help="Pipeline de pre-processamento a aplicar."
+        help="Preprocessing pipeline to be applied."
     )
     args = parser.parse_args()
 
