@@ -11,7 +11,7 @@ import argparse
 from preprocessing import preprocess_pipeline
 
 
-# Configuración de Rutas
+# Route Configuration
 BASE_DIR = "."
 CSV_PATH = os.path.join(BASE_DIR, "HAM10000_metadata.csv")
 ORIGINAL_IMAGES_DIRS = [
@@ -31,7 +31,7 @@ def remove_black_borders(img_pil):
     # Mask pixels that are not completely black (tolerance threshold = 10)
     non_black_mask = np.any(img_np > 10, axis=2)
     
-    # Encontrar las coordenadas extremas con información de imagen
+    # Finding extreme coordinates using image information
     rows = np.any(non_black_mask, axis=1)
     cols = np.any(non_black_mask, axis=0)
     
