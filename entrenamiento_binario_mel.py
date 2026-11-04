@@ -76,9 +76,9 @@ from tensorflow.keras.optimizers import Adam
 from preprocessing import preprocess_pipeline
 
 
-# ======================================================================================
+
 # General utilities
-# ======================================================================================
+
 def fmt_dur(seconds):
     seconds = int(round(seconds))
     h, rem = divmod(seconds, 3600)
@@ -140,9 +140,9 @@ def parse_thr_mode(s):
         raise argparse.ArgumentTypeError("thr-mode must be 'f1', 'sensitivity', or a number (e.g., 0.5)")
 
 
-# ======================================================================================
+
 # Dataset: organization into folders and uploading
-# ======================================================================================
+
 def prepare_dataset(base_dir, dataset_dir, seed=42):
     """Copy the HAM10000 images to Datasets/training|validation/<dx>/ (using an 80/20 split by lesion)."""
     from sklearn.model_selection import GroupShuffleSplit
@@ -210,9 +210,9 @@ def load_split(folder, categories, img_size, to_rgb, pad, limit=None, preprocess
     return np.asarray(X, dtype=np.uint8), np.asarray(Y, dtype=np.int64), files, failed
 
 
-# ======================================================================================
+
 # Model
-# ======================================================================================
+
 def make_augmentation():
     # No color changes: color is clinically relevant information.
     return Sequential([RandomFlip("horizontal_and_vertical"), RandomRotation(0.2), RandomZoom(0.1)],
@@ -264,9 +264,9 @@ def get_class_weights(y, mode):
     return {int(c): float(w) for c, w in zip(classes, cw)}
 
 
-# ======================================================================================
+
 # Training log (callback that populates the .txt summary)
-# ======================================================================================
+
 class PhaseLogger(tf.keras.callbacks.Callback):
     """Store metrics by epoch, including timing, learning rate (LR) used, best epochs, and LR reductions."""
 
@@ -322,9 +322,9 @@ def fit_phase(model, name, X, Y, Xv, Yv, epochs, batch_size, class_weight, rows,
                 lr_inicial=logger.lr_start, lr_final=get_lr(model), segundos=round(time.time() - t0, 1))
 
 
-# ======================================================================================
+
 # Metrics and charts (stage 1)
-# ======================================================================================
+
 def binary_metrics(y, p, thr):
     pred = (p >= thr).astype(int)
     tp = int(((pred == 1) & (y == 1)).sum()); fp = int(((pred == 1) & (y == 0)).sum())
@@ -391,9 +391,9 @@ def plot_stage1(y, p, thr, path, title):
     plt.close(fig)
 
 
-# ======================================================================================
+
 # Construction of the .txt summary
-# ======================================================================================
+
 def _df_txt(df, **kw):
     sci = {c: (lambda v: f"{v:.2e}") for c in ("lr", "lr_inicial", "lr_final") if c in df.columns}
     return df.to_string(index=False, float_format=lambda v: f"{v:.4f}", formatters=sci, **kw)
@@ -412,7 +412,7 @@ def build_report(ctx):
     L.append("SUMMARY OF BINARY TRAINING — melanoma (MEL) vs. non-melanoma")
     L.append("For educational use only — not intended for clinical diagnosis.")
 
-    # ---------------------------------------------------------------- 1. Executive summary
+    # 1. Executive summary
     section("1. EXECUTIVE SUMMARY")
     kv("Run name", a.get("name"))
     kv("Status", ctx.get("status"))
@@ -437,18 +437,18 @@ def build_report(ctx):
         L.append("")
         L.append("!! EXECUTION DID NOT FINISH CORRECTLY — see section 9 (error).")
 
-    # ---------------------------------------------------------------- 2. Environment
+    # 2. Environment
     section("2. ENVIRONMENT")
     for k, v in ctx.get("env", {}).items():
         kv(k, v)
     kv("Command", ctx.get("cmd"))
 
-    # ---------------------------------------------------------------- 3. Configuration
+    # 3. Configuration
     section("3. CONFIGURATION")
     for k, v in a.items():
         kv(k, v)
 
-    # ---------------------------------------------------------------- 4. Data
+    # 4. Data
     d = ctx.get("dataset")
     section("4. DATA")
     if d:
@@ -476,7 +476,7 @@ def build_report(ctx):
     else:
         L.append("(dataset was not loaded)")
 
-    # ---------------------------------------------------------------- 5. Model
+    # 5. Model
     section("5. MODEL")
     mo = ctx.get("model")
     if mo:
@@ -492,7 +492,7 @@ def build_report(ctx):
     else:
         L.append("(model was not built)")
 
-    # ---------------------------------------------------------------- 6. Training
+    # 6. Training
     section("6. TRAINING")
     if phases:
         L.append("Phases:")
@@ -507,7 +507,7 @@ def build_report(ctx):
     L.append("Event timeline:")
     L.extend(ctx.get("events", []) or ["(no events)"])
 
-    # ---------------------------------------------------------------- 7. Evaluation
+    # 7. Evaluation
     section("7. VALIDATION EVALUATION (final model)")
     if ev:
         kv("Threshold", f"{ev['thr']:.2f}  (mode: {ev['thr_mode']}"
@@ -536,11 +536,11 @@ def build_report(ctx):
     else:
         L.append("(evaluation was not reached)")
 
-    # ---------------------------------------------------------------- 8. Files
+    # 8. Files
     section("8. GENERATED FILES")
     L.extend(ctx.get("files", []) or ["(none)"])
 
-    # ---------------------------------------------------------------- 9. Notes / warnings / error
+    # 9. Notes / warnings / error
     section("9. AUTOMATIC NOTES AND WARNINGS")
     for w in ctx.get("warnings", []):
         L.append(f"- {w}")
@@ -579,14 +579,14 @@ def derive_warnings(ctx):
     return w
 
 
-# ======================================================================================
+
 # Main execution
-# ======================================================================================
+
 def run_training(args, run_dir, ctx, event):
     files = ctx["files"]
     tf.keras.utils.set_random_seed(args.seed)
 
-    # ------------------------------------------------ dataset
+    # dataset
     dataset_dir = Path(args.dataset_dir)
     if not (dataset_dir / "training").exists():
         if args.base_dir:
@@ -626,7 +626,7 @@ def run_training(args, run_dir, ctx, event):
     if cw:
         event(f"Class weights ({args.class_weights}): {ctx['class_weights']}")
 
-    # ------------------------------------------------ model
+    # model
     tf.keras.backend.clear_session()
     gc.collect()
     tf.keras.utils.set_random_seed(args.seed)
@@ -638,7 +638,7 @@ def run_training(args, run_dir, ctx, event):
     ctx["model"] = dict(params_total=model.count_params(), trainable_head=count_params(model.trainable_weights),
                         trainable_ft=None, summary=summary_lines)
 
-    # ------------------------------------------------ training
+    # training
     rows, phases = [], ctx["phases"]
     phases.append(fit_phase(model, "phase1_head", X_tr, Y1_tr, X_va, Y1_va, args.epochs_head,
                             args.batch_size, cw, rows, event))
@@ -658,7 +658,7 @@ def run_training(args, run_dir, ctx, event):
     plot_history(hist, run_dir / "training_curves.png", f"{args.name} — Stage 1 (mel vs non-mel)")
     files.append("training_curves.png — accuracy / loss / AUC curves (gray line = phase change)")
 
-    # ------------------------------------------------ evaluation
+    # evaluation
     event("Evaluating on validation ...")
     p_mel = model.predict(X_va, batch_size=64, verbose=0).ravel()
     keras_eval = dict(zip(["val_loss", "val_accuracy", "val_auc"],
@@ -687,7 +687,7 @@ def run_training(args, run_dir, ctx, event):
           f"sensitivity={m_thr['sensitivity']:.3f} | specificity={m_thr['specificity']:.3f} | "
           f"precision={m_thr['precision']:.3f}")
 
-    # ------------------------------------------------ save artifacts
+    # save artifacts
     pd.DataFrame({"file": files_va, "original_class": [categories[i] for i in Y_va],
                   "y_actual_mel": Y1_va, "p_mel": p_mel, "pred_mel": pred}).to_csv(
         run_dir / "validation_predictions.csv", index=False)

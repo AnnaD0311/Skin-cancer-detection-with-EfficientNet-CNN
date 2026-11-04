@@ -43,9 +43,7 @@ from sklearn.model_selection import GroupShuffleSplit
 from tqdm import tqdm
 
 
-# ============================================================
 # 1. CONFIGURATION
-# ============================================================
 
 BASE_DIR = Path(".")
 
@@ -63,9 +61,8 @@ DEFAULT_SEED = 42
 DEFAULT_TARGET_COUNT = 1000
 
 
-# ============================================================
 # 2. FIND IMAGE PATHS
-# ============================================================
+
 
 def get_image_paths(base_dir):
 
@@ -104,9 +101,9 @@ def get_image_paths(base_dir):
     return image_paths
 
 
-# ============================================================
+
 # 3. SPLIT DATASET BY LESION ID
-# ============================================================
+
 
 def split_dataset(metadata, seed=42):
 
@@ -194,9 +191,9 @@ def split_dataset(metadata, seed=42):
     return splits
 
 
-# ============================================================
+
 # 4. IMAGE PREPROCESSING
-# ============================================================
+
 
 def preprocess_image(
     image_path,
@@ -243,9 +240,9 @@ def preprocess_image(
     ).convert("RGB")
 
 
-# ============================================================
+
 # 5. DATA AUGMENTATION
-# ============================================================
+
 
 def apply_augmentation(image, rng):
 
@@ -282,9 +279,9 @@ def apply_augmentation(image, rng):
     return image
 
 
-# ============================================================
+
 # 6. SAVE ORIGINAL IMAGES
-# ============================================================
+
 
 def save_split(
     dataframe,
@@ -334,9 +331,9 @@ def save_split(
         )
 
 
-# ============================================================
+
 # 7. BALANCE TRAINING DATA ONLY
-# ============================================================
+
 
 def balance_training_dataset(
     train_df,
@@ -432,9 +429,9 @@ def balance_training_dataset(
     print("\nTraining augmentation completed.")
 
 
-# ============================================================
+
 # 8. MAIN FUNCTION
-# ============================================================
+
 
 def main():
 
@@ -621,9 +618,9 @@ def main():
             seed=args.seed
         )
 
-    print("\n======================================")
+    print("\n")
     print("DATASET PREPARATION COMPLETED")
-    print("======================================")
+    print("\n")
 
     print("No lesion-level data leakage detected.")
 
@@ -638,9 +635,9 @@ def main():
     )
 
 
-# ============================================================
+
 # 9. EXECUTION
-# ============================================================
+
 
 if __name__ == "__main__":
     main()

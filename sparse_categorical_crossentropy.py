@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 MULTICLASS Training: 7 classes (HAM10000)
-==============================================
+
 Adapted translation from the binary script to direct multiclass classification (7 options).
 
 What it does
@@ -70,9 +70,9 @@ from tensorflow.keras.optimizers import Adam
 from preprocessing import preprocess_pipeline
 
 
-# ======================================================================================
+
 # General Utilities
-# ======================================================================================
+
 def fmt_dur(seconds):
     seconds = int(round(seconds))
     h, rem = divmod(seconds, 3600)
@@ -124,9 +124,9 @@ def get_lr(model):
     return float("nan")
 
 
-# ======================================================================================
+
 # Dataset: Folder Organization and Loading
-# ======================================================================================
+
 def prepare_dataset(base_dir, dataset_dir, seed=42):
     """Copies HAM10000 images to Datasets/training|validation/<dx>/ (80/20 split per lesion)."""
     from sklearn.model_selection import GroupShuffleSplit
@@ -197,9 +197,9 @@ def load_split(folder, categories, img_size, to_rgb, pad, limit=None, preprocess
     return np.asarray(X, dtype=np.uint8), np.asarray(Y, dtype=np.int64), files, failed
 
 
-# ======================================================================================
+
 # Multiclass Model
-# ======================================================================================
+
 def make_augmentation():
     return Sequential([RandomFlip("horizontal_and_vertical"), RandomRotation(0.2), RandomZoom(0.1)],
                       name="data_augmentation")
@@ -251,9 +251,9 @@ def get_class_weights(y, mode, num_classes):
     return {int(c): float(w) for c, w in zip(classes, cw)}
 
 
-# ======================================================================================
+
 # Training Logging
-# ======================================================================================
+
 class PhaseLogger(tf.keras.callbacks.Callback):
     def __init__(self, phase, rows, event_fn, epochs_planned):
         super().__init__()
@@ -305,9 +305,9 @@ def fit_phase(model, name, X, Y, Xv, Yv, epochs, batch_size, class_weight, rows,
                 initial_lr=logger.lr_start, final_lr=get_lr(model), seconds=round(time.time() - t0, 1))
 
 
-# ======================================================================================
+
 # Multiclass Plots and Metrics
-# ======================================================================================
+
 def plot_history(df, path, title):
     panels = [(c, t) for c, t in [("accuracy", "Accuracy"), ("loss", "Loss")] if c in df.columns]
     fig, axes = plt.subplots(1, len(panels), figsize=(5.5 * len(panels), 4))
@@ -336,9 +336,9 @@ def plot_confusion_matrix(y_true, y_pred, categories, path, title):
     plt.close(fig)
 
 
-# ======================================================================================
+
 # .txt Report Construction
-# ======================================================================================
+
 def _df_txt(df, **kw):
     sci = {c: (lambda v: f"{v:.2e}") for c in ("lr", "initial_lr", "final_lr") if c in df.columns}
     return df.to_string(index=False, float_format=lambda v: f"{v:.4f}", formatters=sci, **kw)
@@ -434,9 +434,9 @@ def derive_warnings(ctx):
     return w
 
 
-# ======================================================================================
+
 # Main Execution
-# ======================================================================================
+
 def run_training(args, run_dir, ctx, event):
     files = ctx["files"]
     tf.keras.utils.set_random_seed(args.seed)
